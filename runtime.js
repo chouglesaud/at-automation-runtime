@@ -195,10 +195,11 @@ async function http(s) {
 const JSON_H = [{ key: "Content-Type", value: "application/json" }];
 const post = (url, headers, body) => http({ method: "POST", url, headers, body, raw: true });
 const S = (v) => show(tpl(v));
+const form = (o) => Object.keys(o).map((k) => encodeURIComponent(k) + "=" + encodeURIComponent(o[k])).join("&");
 
 function b64(str) {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-  const bytes = new TextEncoder().encode(str);
+  const bytes = [...unescape(encodeURIComponent(str))].map((c) => c.charCodeAt(0)); // UTF-8 bytes
   let out = "";
   for (let i = 0; i < bytes.length; i += 3) {
     const n = (bytes[i] << 16) | ((bytes[i + 1] || 0) << 8) | (bytes[i + 2] || 0);
@@ -225,8 +226,8 @@ async function notify(s) {
 /** SMS / WhatsApp via Twilio (use "whatsapp:+1555…" for both numbers on WhatsApp). */
 async function sms(s) {
   const sid = S(s.accountSid), auth = b64(sid + ":" + S(s.authToken));
-  const form = new URLSearchParams({ To: S(s.to), From: S(s.from), Body: S(s.body) }).toString();
-  await post(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, [{ key: "Authorization", value: "Basic " + auth }, { key: "Content-Type", value: "application/x-www-form-urlencoded" }], form);
+  const body = form({ To: S(s.to), From: S(s.from), Body: S(s.body) });
+  await post(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, [{ key: "Authorization", value: "Basic " + auth }, { key: "Content-Type", value: "application/x-www-form-urlencoded" }], body);
 }
 
 async function sendEmail(s) {
@@ -238,8 +239,8 @@ async function sendEmail(s) {
     case "sendgrid":
       return void (await post("https://api.sendgrid.com/v3/mail/send", bearer, JSON.stringify({ personalizations: [{ to: [{ email: to }] }], from: { email: from }, subject, content: [{ type: html ? "text/html" : "text/plain", value: text }] })));
     case "mailgun": {
-      const form = new URLSearchParams({ from, to, subject, [html ? "html" : "text"]: text }).toString();
-      return void (await post(`https://api.mailgun.net/v3/${S(s.domain)}/messages`, [{ key: "Authorization", value: "Basic " + b64("api:" + key) }, { key: "Content-Type", value: "application/x-www-form-urlencoded" }], form));
+      const body = form({ from, to, subject, [html ? "html" : "text"]: text });
+      return void (await post(`https://api.mailgun.net/v3/${S(s.domain)}/messages`, [{ key: "Authorization", value: "Basic " + b64("api:" + key) }, { key: "Content-Type", value: "application/x-www-form-urlencoded" }], body));
     }
     case "postmark":
       return void (await post("https://api.postmarkapp.com/email", [{ key: "X-Postmark-Server-Token", value: key }, { key: "Accept", value: "application/json" }, ...JSON_H], JSON.stringify({ From: from, To: to, Subject: subject, [html ? "HtmlBody" : "TextBody"]: text })));
